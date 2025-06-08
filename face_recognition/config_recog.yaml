@@ -1,0 +1,24 @@
+# 얼굴 인식 설정 파일
+face_recognition:
+  # MTCNN 얼굴 탐지 설정
+  mtcnn:
+    image_size: 160              # FaceNet 표준 크기
+    margin: 20                   # 얼굴 주변 여백
+    prob_threshold: 0.9          # 얼굴 탐지 신뢰도 임계값
+    align_faces: true            # 눈 위치 기반 정렬 활성화
+    device: 'cuda'               # 'cuda' 또는 'cpu'
+  
+  # FaceNet 모델 설정
+  facenet:
+    model_name: 'vggface2'       # 사전학습 모델 ('vggface2' 또는 'casia-webface')
+    similarity_threshold: 0.7     # 유사도 판정 임계값 (0~1)
+  
+  # 경로 설정
+  paths:
+    reference_images: './reference_images'     # 참조 이미지 폴더
+    target_embeddings: './target_embeddings'  # 임베딩 저장 폴더
+  
+  # 로깅 설정
+  logging:
+    level: 'INFO'               # 로그 레벨
+    save_logs: true             # 로그 파일 저장 여부

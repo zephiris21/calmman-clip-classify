@@ -1,0 +1,63 @@
+# Calmman PyTorch GPU 얼굴 분류 시스템 설정
+
+# 비디오 처리 설정
+video:
+  frame_skip: 30              # 몇 프레임마다 처리할지 (30 = 1초에 1프레임 처리)
+  default_directory: "yt_download/downloads"                  # 처리할 비디오 경로
+  default_filename: "직장인들이 사랑하는 생선구이 먹방.mp4"      # 처리할 비디오 파일명
+
+# MTCNN 얼굴 탐지 설정  
+mtcnn:
+  batch_size: 64              # GPU 배치 처리 크기
+  image_size: 224             # 출력 이미지 크기
+  margin: 20                  # 얼굴 주변 여백
+  prob_threshold: 0.9         # 얼굴 탐지 확률 임계값
+  align_faces: true           # 눈 정렬 활성화
+
+# 얼굴 인식 설정 (FaceNet)
+face_recognition:
+  enabled: true                                              # 얼굴 인식 활성화
+  test_mode: false                                           # 테스트 모드 (true: 모델 로드 안함, 인식 건너뜀)
+  embedding_path: './face_recognition/target_embeddings/chimchakman.npy'  # 타겟 임베딩 파일 경로
+  similarity_threshold: 0.5                                   # 유사도 임계값 (0~1)                                 # FaceNet 배치 크기 (MTCNN과 동일)
+  preprocessing_method: 'resize'                              # 전처리 방법 ('resize' 224→160)                                          # GPU 사용
+  logging:
+    save_filtered_faces: false                               # 필터링된 얼굴 이미지 저장 여부
+    track_similarity_stats: true                             # 유사도 통계 추적
+    log_filtered_count: true                                 # 필터링된 얼굴 수 로깅
+
+# PyTorch 분류 모델 설정
+classifier:
+  framework: "pytorch"        # 프레임워크 지정
+  model_path: "results/pytorch_efficientnet/models"  # 모델 디렉토리
+  device: "cuda"              # GPU 사용
+  batch_size: 192  # 분류 배치 크기
+  batch_timeout: 5.0          # 배치 대기 시간 (초)
+  min_batch_size: 1           # 최소 배치 크기 (타임아웃 시 처리)
+  confidence_threshold: 0.7   # 킹받는 판정 임계값
+
+# 성능 관리 설정
+performance:
+  max_queue_size: 1000         # 프레임 버퍼 최대 크기
+  monitoring_interval: 5      # 성능 모니터링 간격 (초)
+
+# 출력 설정
+output:
+  base_dir: "results/video_processing"  # 기본 출력 디렉토리
+  create_video_folder: true             # 영상별 폴더 생성
+  save_highlights: true                 # 킹받는 프레임 이미지 저장 여부
+  save_timestamps: true                 # 타임스탬프 JSON 저장 여부
+  save_processing_log: true             # 처리 로그 저장 여부
+
+# 로깅 설정
+logging:
+  level: "INFO"                         # 로그 레벨 (DEBUG, INFO, WARNING, ERROR)
+  face_detection_verbose: false         # 개별 얼굴 탐지 로그 비활성화
+  batch_summary: true                   # 배치 단위 요약 로그
+  performance_tracking: true            # 성능 추적 로그
+  save_logs: true                       # 로그 파일 저장
+
+# 디버깅 설정 (개발용)
+debug:
+  memory_monitoring: true     # GPU 메모리 모니터링
+  timing_detailed: false      # 상세 타이밍 측정

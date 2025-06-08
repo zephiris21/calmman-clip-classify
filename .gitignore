@@ -1,0 +1,103 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# 데이터 파일들
+data/
+*.mp4
+*.wav
+*.mp3
+*.avi
+*.mov
+
+# 모델 파일들
+# models/
+# *.pt
+# *.pth
+# *.onnx
+# *.pkl
+# *.joblib
+
+# 결과 및 출력 파일들
+video_analyzer/
+results/
+outputs/
+logs/
+*.log
+
+# HDF5 파일들
+*.h5
+*.hdf5
+
+# 임베딩 파일들
+# face_recognition/target_embeddings/
+# *.npy
+
+# 임시 파일들
+temp/
+tmp/
+cache/
+.cache/
+
+# 시각화 결과
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+plots/
+figures/
+
+# 설정 파일 (개인별 다를 수 있음)
+configs/local_*.yaml
+configs/personal_*.yaml
+
+# OS 관련
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 백업 파일들
+*.bak
+*.backup
+*.old
