@@ -1,0 +1,9 @@
+audio:
+  analysis_interval: 0.1
+  sample_rate: 22050
+logging:
+  level: INFO
+output:
+  audio_sequence_dir: audio_sequences
+  base_dir: video_analyzer
+  preprocessed_dir: preprocessed_data
