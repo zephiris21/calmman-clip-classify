@@ -1,0 +1,173 @@
+# 침착맨 AI 재미도 분석 시스템 - 통합 설정 파일 (간소화 버전)
+# 전체 파이프라인의 핵심 설정만 관리
+
+# =============================================================================
+# 파이프라인 전체 설정
+# =============================================================================
+pipeline:
+  name: "침착맨 재미도 분석 시스템"
+  version: "2.0.0"
+  
+  # 파이프라인 단계 정의
+  steps:
+    1: "video_preprocessing"     # 비디오 전처리 (얼굴 탐지 + 감정 분석)
+    2: "audio_preprocessing"     # 오디오 전처리 (VAD + RMS)
+    3: "tension_calculation"     # 텐션 계산
+    4: "emotion_highlights"      # 감정 하이라이트 추출
+    5: "angry_classification"    # 킹받는 얼굴 분류
+    viz: "visualization"         # 시각화 생성
+  
+  # 실행 모드
+  execution:
+    auto_mode: 0                 # 0: 자동 전체 실행, 1: 단계별 실행 (사용자 입력)
+
+# =============================================================================
+# 통합 출력 경로 설정
+# =============================================================================
+output:
+  base_dir: "outputs"                    # 프로젝트 루트/outputs
+  preprocessed: "preprocessed"           # HDF5 파일들
+  debug_faces: "debug_faces"             # 얼굴 이미지들
+  tension: "tension_analysis"            # 텐션 계산 결과
+  classification: "classification"       # 썸네일 분류 결과
+  highlights: "highlights"               # 감정 하이라이트 이미지
+  visualization: "visualization"         # 그래프, 차트들
+  logs: "logs"                          # 실행 로그들
+
+# =============================================================================
+# 1단계: 비디오 전처리 설정
+# =============================================================================
+video_preprocessing:
+  # 프레임 처리 설정
+  frame_skip: 15                 # 프레임 스킵 (15 = 0.25초 간격)
+  extract_emotions: true         # 감정 추출 여부
+  save_face_images: true         # 얼굴 이미지 저장 여부
+  save_others_faces: false       # 다른 사람 얼굴 저장 안함 (파이프라인용)
+  
+  # MTCNN 얼굴 탐지 설정
+  mtcnn:
+    batch_size: 32               # 배치 크기
+    image_size: 224              # 출력 이미지 크기
+    margin: 20                   # 얼굴 주변 여백
+    prob_threshold: 0.9          # 얼굴 탐지 확률 임계값
+    align_faces: false           # 눈 정렬 비활성화 (속도 우선)
+  
+  # VA 감정 모델 설정
+  emotion:
+    model_path: 'models/affectnet_emotions/enet_b0_8_va_mtl.pt'
+    device: 'cuda'               # 또는 'cpu'
+    batch_size: 32
+  
+  # FaceNet 얼굴 인식 설정
+  face_recognition:
+    enabled: true
+    test_mode: false             # 테스트 모드 비활성화
+    embedding_path: 'face_recognition/target_embeddings/chimchakman.npy'
+    similarity_threshold: 0.7    # 침착맨 인식 임계값
+    batch_size: 32
+
+# =============================================================================
+# 2단계: 오디오 전처리 설정
+# =============================================================================
+audio_preprocessing:
+  # 오디오 분석 설정
+  sample_rate: 16000             # Silero VAD 요구사항 (16kHz)
+  analysis_interval: 0.05        # 분석 간격 (50ms)
+  
+  # VAD (Voice Activity Detection) 설정
+  vad_confidence_threshold: 0.5  # Silero 신뢰도 임계값
+
+# =============================================================================
+# 3단계: 텐션 계산 설정
+# =============================================================================
+tension_calculation:
+  # 텐션 계산 파라미터
+  window_duration: 0.5           # 윈도우 크기 (초)
+  emotion_weight: 0.6            # 감정 가중치
+  audio_weight: 0.4              # 오디오 가중치
+  arousal_multiplier: 10         # Arousal 배수
+  
+  # 오디오 설정
+  audio:
+    voice_rms_max: 0.1           # Voice RMS 최대값 (정규화용)
+    vad_activity_threshold: 0.2  # VAD 활동 임계값
+  
+  # Decay 설정
+  decay:
+    decay_rate: 0.95             # 일반 decay 비율
+    silence_3sec_decay: 0.85     # 3초 침묵 시 decay 비율
+    silence_threshold_seconds: 1.0  # 침묵 판정 임계값
+  
+  # 편집 포인트 탐지 설정
+  editing:
+    highlight_sensitivity: 1.5    # 하이라이트 민감도
+    change_threshold: 0.9         # 변화율 임계값
+    low_tension_threshold: 3.0    # 저텐션 구간 임계값
+
+# =============================================================================
+# 4단계: 감정 하이라이트 추출 설정
+# =============================================================================
+emotion_highlights:
+  # 추출 설정
+  top_n_per_emotion: 5           # 각 감정별 상위 N개 추출
+  include_emotions:              # 추출할 감정 목록
+    - 'Anger'
+    - 'Contempt'
+    - 'Disgust'
+    - 'Fear'
+    - 'Happiness'
+    - 'Neutral'
+    - 'Sadness'
+    - 'Surprise'
+    - 'Valence'                  # 극값 (절댓값 최대)
+    - 'Arousal'                  # 텐션 높은 순간
+  
+  # 필터링 설정
+  min_emotion_threshold: 0.1     # 최소 감정 임계값
+  
+  # 이미지 설정
+  filename_format: 'highlight_{emotion}_{rank:03d}_{timestamp:.1f}s_{value:.3f}.jpg'
+
+# =============================================================================
+# 5단계: 썸네일 분류 설정
+# =============================================================================
+thumbnail_classification:
+  # PyTorch 분류 모델 설정
+  model_path: "models/enet_b0_imagenet"  # 모델 디렉토리
+  device: "cuda"                 # 또는 "cpu"
+  
+  # 분류 설정
+  confidence_threshold:  0.6     # 썸네일용 판정 임계값
+  batch_size: 64                 # 분류 배치 크기
+  
+  # 출력 설정
+  filename_format: 'thumbnail_{rank:03d}_{timestamp:.1f}s_conf{confidence:.3f}.jpg'
+  max_thumbnails: 20             # 최대 썸네일 저장 수
+
+# =============================================================================
+# 시각화 설정
+# =============================================================================
+visualization:
+  # 그래프 설정
+  figure_size: [16, 10]          # 그래프 크기
+  dpi: 150                       # 해상도
+  
+  # 텐션 곡선 설정
+  tension_curves:
+    save_format: 'png'           # 저장 형식
+    show_highlights: true        # 하이라이트 포인트 표시
+    time_format: 'mm:ss'         # 시간 형식
+  
+  # 감정 분포 설정
+  emotion_distribution:
+    save_format: 'png'
+    include_va: true             # Valence, Arousal 포함
+
+# =============================================================================
+# 로깅 설정
+# =============================================================================
+logging:
+  level: 'INFO'                  # DEBUG, INFO, WARNING, ERROR
+  console_output: true           # 콘솔 출력 여부
+  file_output: true              # 파일 출력 여부
+  log_filename: 'pipeline_{timestamp}.log'

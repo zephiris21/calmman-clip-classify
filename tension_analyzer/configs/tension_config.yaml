@@ -17,6 +17,6 @@ output:
   tension_analysis_dir: outputs/tension_data
 tension:
   arousal_multiplier: 10
-  audio_weight: 0.5
+  audio_weight: 0.4
   emotion_weight: 0.6
   window_duration: 0.5
