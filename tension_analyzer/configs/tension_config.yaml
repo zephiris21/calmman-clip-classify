@@ -1,0 +1,22 @@
+audio:
+  vad_activity_threshold: 0.2
+  voice_rms_max: 0.1
+decay:
+  decay_rate: 0.95
+  silence_3sec_decay: 0.85
+  silence_threshold_seconds: 1.0
+editing:
+  change_threshold: 0.9
+  highlight_sensitivity: 1.5
+  low_tension_threshold: 3.0
+logging:
+  level: INFO
+  save_detailed_log: true
+output:
+  base_dir: tension_analyzer
+  tension_analysis_dir: outputs/tension_data
+tension:
+  arousal_multiplier: 10
+  audio_weight: 0.3
+  emotion_weight: 0.7
+  window_duration: 0.5
