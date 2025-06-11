@@ -464,7 +464,7 @@ class MultiEmotionTensionCalculator:
         # 2. VAD 기반 Voice RMS 계산
         voice_frames = rms_values[vad_labels == 1]
         voice_rms = np.mean(voice_frames) if len(voice_frames) > 0 else 0.0
-        voice_rms_norm = min(voice_rms / self.voice_rms_max, 1.0) * 5  # 0~5 스케일
+        voice_rms_norm = min(voice_rms / self.voice_rms_max, 1.0) * 10  # 0~10 스케일
         
         # 3. VAD 활동 비율
         vad_activity = np.mean(vad_labels)

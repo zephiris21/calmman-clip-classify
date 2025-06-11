@@ -71,7 +71,7 @@ video:
 # 2단계: 오디오 전처리 설정
 # =============================================================================
 audio:
-  sample_rate: 16000          # WebRTC VAD 요구사항에 맞춰 16kHz로 변경
+  sample_rate: 16000          # Silero 요구사항에 맞춰 16kHz로 변경
   analysis_interval: 0.05     # 분석 간격 (초) - 0.05초마다 RMS + VAD 계산
   vad_model: "silero"           # NEW: VAD 모델 선택
   vad_confidence_threshold: 0.5 # NEW: Silero 신뢰도 임계값
@@ -79,7 +79,7 @@ audio:
   output_format: "sequence"   # 출력 형식: sequence (시퀀스) vs features (압축특징)
 
 # 텐션 계산용 추가 설정
-  voice_rms_max: 0.1           # Voice RMS 최대값 (정규화용)
+  voice_rms_max: 0.2           # Voice RMS 최대값 (정규화용) 오디오 클리핑
   vad_activity_threshold: 0.2  # VAD 활동 임계값
 
 # =============================================================================
