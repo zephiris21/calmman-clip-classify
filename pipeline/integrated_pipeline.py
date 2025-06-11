@@ -348,12 +348,18 @@ class IntegratedPipeline:
             import matplotlib.pyplot as plt
             
             # 시각화 도구 초기화
-            visualizer = TensionVisualizer()
+            visualizer = TensionVisualizer(config=self.config)
             
             # 텐션 데이터 로드
             if visualizer.load_tension_data(self.results['tension_json']):
-                # 시각화 출력 디렉토리
-                viz_dir = self.output_dirs['visualization']
+                # 비디오명 추출 및 안전한 폴더명 생성
+                video_name = Path(self.results['video_path']).stem
+                safe_video_name = PipelineUtils.safe_filename(video_name)
+                
+                # 비디오별 시각화 디렉토리 생성
+                viz_dir = os.path.join(self.output_dirs['visualization'], safe_video_name)
+                os.makedirs(viz_dir, exist_ok=True)
+                
                 self.results['visualization_dir'] = viz_dir
                 
                 # 자동으로 얼굴 폴더 감지

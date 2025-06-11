@@ -23,7 +23,8 @@ class TensionVisualizer:
     주피터랩에서 셀 단위로 편리하게 사용할 수 있도록 설계
     """
     
-    def __init__(self, debug_faces_dir: str = "video_analyzer/preprocessed_data/debug_faces/chimchakman"):
+    def __init__(self, debug_faces_dir: str = "video_analyzer/preprocessed_data/debug_faces/chimchakman", 
+             config: Dict = None):
         """
         시각화 도구 초기화
         
@@ -34,6 +35,15 @@ class TensionVisualizer:
         self.tension_data = None
         self.video_name = None
         
+        # config가 있으면 config 기반, 없으면 기본 경로
+        if config is not None:
+            base_dir = config['output']['base_dir']
+            self.video_sequences_dir = os.path.join(base_dir, "preprocessed_data/video_sequences")
+            self.debug_faces_dir = os.path.join(base_dir, "preprocessed_data/debug_faces")
+            print(f"✅ Config 로드 완료")
+        else:
+            self.video_sequences_dir = "video_analyzer/preprocessed_data/video_sequences"  # 기본값
+            print(f"❌ Config 로드 실패")
         # 감정 레이블 및 색상
         self.emotion_labels = [
             'Anger', 'Contempt', 'Disgust', 'Fear', 
@@ -53,7 +63,7 @@ class TensionVisualizer:
         ]
         
         print(f"✅ TensionVisualizer 초기화 완료")
-        print(f"   얼굴 이미지 디렉토리: {debug_faces_dir}")
+        print(f"   얼굴 이미지 디렉토리: {self.debug_faces_dir}")
     
     def load_tension_data(self, json_file_path: str) -> bool:
         """
@@ -405,14 +415,13 @@ class TensionVisualizer:
         if self.video_name is None:
             return None
         
-        video_sequences_dir = "video_analyzer/preprocessed_data/video_sequences"
-        if not os.path.exists(video_sequences_dir):
+        if not os.path.exists(self.video_sequences_dir):
             return None
         
         # 비디오명으로 파일 찾기
-        for file in os.listdir(video_sequences_dir):
+        for file in os.listdir(self.video_sequences_dir):
             if self.video_name.replace('.mp4', '') in file and file.endswith('.h5'):
-                return os.path.join(video_sequences_dir, file)
+                return os.path.join(self.video_sequences_dir, file)
         
         return None
     

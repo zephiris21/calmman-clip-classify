@@ -9,6 +9,7 @@ from PIL import Image
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import argparse
+from datetime import datetime
 
 # 프로젝트 루트 찾기
 current_file = Path(__file__)
@@ -146,6 +147,14 @@ class ThumbnailClassifier:
         if video_data is None:
             raise ValueError(f"비디오 HDF5 로드 실패: {video_hdf5_path}")
         
+        # 비디오별 하위 폴더 생성
+        video_name = video_data['metadata']['video_name']
+        timestamp = datetime.now().strftime("%Y%m%d")
+        video_folder = f"{video_name}_{timestamp}"
+        video_output_dir = os.path.join(output_dir, video_folder)
+        
+        print(f"   비디오별 출력: {video_output_dir}")
+        
         # 침착맨 얼굴 디렉토리 찾기
         chimchakman_faces_dir = PipelineUtils.get_chimchakman_faces_directory(video_data)
         if not chimchakman_faces_dir:
@@ -153,8 +162,8 @@ class ThumbnailClassifier:
         
         print(f"   얼굴 디렉토리: {chimchakman_faces_dir}")
         
-        # 디렉토리에서 분류 수행
-        return self.classify_faces_from_directory(chimchakman_faces_dir, output_dir)
+        # 디렉토리에서 분류 수행 (video_output_dir 사용)
+        return self.classify_faces_from_directory(chimchakman_faces_dir, video_output_dir)
     
     def _find_face_images(self, faces_dir: str) -> List[str]:
         """

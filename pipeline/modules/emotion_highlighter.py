@@ -9,6 +9,7 @@ from PIL import Image
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import argparse
+from datetime import datetime
 
 # 프로젝트 루트로 이동
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -73,8 +74,15 @@ class EmotionHighlighter:
         if video_data is None:
             raise ValueError(f"비디오 HDF5 로드 실패: {video_hdf5_path}")
         
+        # 비디오별 하위 폴더 생성
+        video_name = video_data['metadata']['video_name']
+        timestamp = datetime.now().strftime("%Y%m%d")
+        video_folder = f"{video_name}_{timestamp}"
+        video_output_dir = os.path.join(output_dir, video_folder)
+        
         # 출력 디렉토리 생성
-        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(video_output_dir, exist_ok=True)
+        print(f"   비디오별 출력: {video_output_dir}")
         
         # 얼굴 이미지 디렉토리 찾기
         chimchakman_faces_dir = PipelineUtils.get_chimchakman_faces_directory(video_data)
@@ -110,7 +118,7 @@ class EmotionHighlighter:
             try:
                 highlights = self._extract_emotion_highlights(
                     emotion, valid_emotions, valid_timestamps, valid_indices,
-                    chimchakman_faces_dir, output_dir
+                    chimchakman_faces_dir, video_output_dir
                 )
                 extraction_results[emotion] = highlights
                 total_extracted += len(highlights)
@@ -127,7 +135,7 @@ class EmotionHighlighter:
             'extracted_count': total_extracted,
             'highlights': extraction_results,
             'video_name': video_data['metadata']['video_name'],
-            'output_dir': output_dir
+            'output_dir': video_output_dir  # ← 변경된 경로 반환
         }
     
     def _extract_emotion_highlights(self, emotion: str, emotions: np.ndarray, 

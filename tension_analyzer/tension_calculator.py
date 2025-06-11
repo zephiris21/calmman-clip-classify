@@ -59,10 +59,11 @@ class MultiEmotionTensionCalculator:
         print("✅ 출력 디렉토리 생성 완료")
         
         # HDF5 파일 기본 경로
-        self.audio_sequences_dir = "video_analyzer/preprocessed_data/audio_sequences"
-        self.video_sequences_dir = "video_analyzer/preprocessed_data/video_sequences"
-        print(f"   오디오 디렉토리: {self.audio_sequences_dir}")
-        print(f"   비디오 디렉토리: {self.video_sequences_dir}")
+        base_dir = self.config['output']['base_dir']  # "outputs"
+        self.audio_sequences_dir = os.path.join(base_dir, self.config['output']['preprocessed_dir'], 
+                                            self.config['output']['audio_sequence_dir'])
+        self.video_sequences_dir = os.path.join(base_dir, self.config['output']['preprocessed_dir'],
+                                            self.config['output']['video_sequence_dir'])
         
         # 감정 레이블 (MTCNN 순서)
         self.emotion_labels = [
