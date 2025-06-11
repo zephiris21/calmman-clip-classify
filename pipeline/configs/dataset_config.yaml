@@ -33,7 +33,6 @@ output:
   preprocessed_dir: "preprocessed_data"
   video_sequence_dir: "video_sequences"
   audio_sequence_dir: "audio_sequences"
-  tension_analysis_dir: "tension_data"
 
 # =============================================================================
 # 1단계: 비디오 전처리 설정
