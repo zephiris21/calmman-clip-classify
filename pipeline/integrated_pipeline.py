@@ -136,7 +136,7 @@ class IntegratedPipeline:
             step_start = time.time()
             
             # 비디오 전처리기 초기화 (기존 설정 활용)
-            video_config_path = "video_analyzer/configs/inference_config.yaml"
+            video_config_path = "pipeline/configs/integrated_config.yaml"
             processor = LongVideoProcessor(video_config_path)
             
             # 비디오 처리
@@ -177,7 +177,7 @@ class IntegratedPipeline:
             step_start = time.time()
             
             # 오디오 전처리기 초기화 (기존 설정 활용)
-            audio_config_path = "video_analyzer/configs/inference_config.yaml"
+            audio_config_path = "pipeline/configs/integrated_config.yaml"
             preprocessor = LongVideoAudioPreprocessor(audio_config_path)
             
             # 오디오 처리
@@ -216,7 +216,7 @@ class IntegratedPipeline:
             step_start = time.time()
             
             # 텐션 계산기 초기화
-            tension_config_path = "tension_analyzer/configs/tension_config.yaml"
+            tension_config_path = "pipeline/configs/integrated_config.yaml"
             calculator = MultiEmotionTensionCalculator(tension_config_path)
             
             # 파일명 패턴 추출 (비디오명에서)

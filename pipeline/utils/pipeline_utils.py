@@ -65,9 +65,6 @@ class PipelineUtils:
         
         dirs = {
             'base': base_dir,
-            'preprocessed': os.path.join(base_dir, config['output']['preprocessed']),
-            'debug_faces': os.path.join(base_dir, config['output']['debug_faces']),
-            'tension': os.path.join(base_dir, config['output']['tension']),
             'classification': os.path.join(base_dir, config['output']['classification']),
             'highlights': os.path.join(base_dir, config['output']['highlights']),
             'visualization': os.path.join(base_dir, config['output']['visualization']),
