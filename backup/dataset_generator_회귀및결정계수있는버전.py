@@ -258,7 +258,7 @@ class ChimchakmanDatasetGenerator:
         return True, "통과"
     
     def extract_features(self, data: Dict, config_name: str) -> np.ndarray:
-        """특징 추출 (설정별)"""
+        """특징 추출 (설정별) - RMS 회귀 특성 추가"""
         config = self.config['dataset']['feature_configs'][config_name]
         num_segments = config['segments']
         use_regression = config['use_regression']
@@ -301,7 +301,7 @@ class ChimchakmanDatasetGenerator:
                             x = np.arange(len(y))
                             slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
                             emotion_slope.append(slope)
-                            emotion_r2.append(r_value ** 2)
+                            emotion_r2.append(max(0, r_value ** 2))  # 음수 방지
                         else:
                             emotion_slope.append(0.0)
                             emotion_r2.append(0.0)
@@ -324,10 +324,26 @@ class ChimchakmanDatasetGenerator:
                 else:
                     emotion_features = np.zeros(20)
             
-            # 오디오 특징 (2차원: RMS 평균 + 표준편차)
+            # 🆕 오디오 특징 확장 (RMS 회귀 추가)
+            rms_mean = np.mean(segment_rms)
+            rms_std = np.std(segment_rms)
+            
+            # RMS 회귀 분석
+            if len(segment_rms) >= 3 and np.std(segment_rms) > 1e-8:
+                x = np.arange(len(segment_rms))
+                slope, intercept, r_value, p_value, std_err = stats.linregress(x, segment_rms)
+                rms_slope = slope
+                rms_r2 = max(0, r_value ** 2)  # 음수 방지
+            else:
+                rms_slope = 0.0
+                rms_r2 = 0.0
+            
+            # 오디오 특징 (4차원: 평균 + 표준편차 + 기울기 + R²)
             audio_features = np.array([
-                np.mean(segment_rms),
-                np.std(segment_rms)
+                rms_mean,
+                rms_std,
+                rms_slope,
+                rms_r2
             ])
             
             # VAD 특징 (1차원: 발화 비율)
@@ -336,7 +352,6 @@ class ChimchakmanDatasetGenerator:
             ])
             
             # 텐션 특징 (3차원: 평균 + 표준편차 + 최대값)
-            # 기존 파이프라인에서 계산된 결합 텐션 사용
             segment_tension = data['tension_values'][start_idx:end_idx]
             
             tension_features = np.array([
@@ -349,17 +364,17 @@ class ChimchakmanDatasetGenerator:
             if use_regression:
                 segment_features = np.concatenate([
                     emotion_features,  # 40차원
-                    audio_features,    # 2차원
+                    audio_features,    # 4차원 (기존 2차원 → 4차원)
                     vad_features,      # 1차원
                     tension_features   # 3차원
-                ])  # 총 46차원
+                ])  # 총 48차원 (기존 46차원 → 48차원)
             else:
                 segment_features = np.concatenate([
                     emotion_features,  # 20차원
-                    audio_features,    # 2차원
+                    audio_features,    # 4차원 (기존 2차원 → 4차원)
                     vad_features,      # 1차원
                     tension_features   # 3차원
-                ])  # 총 26차원
+                ])  # 총 28차원 (기존 26차원 → 28차원)
             
             features.extend(segment_features)
         
@@ -394,8 +409,9 @@ class ChimchakmanDatasetGenerator:
             
             self._create_new_dataset(features_dict, label, clip_id)
     
+    
     def _create_new_dataset(self, features_dict: Dict, label: int, clip_id: str):
-        """새 HDF5 데이터셋 생성"""
+        """새 HDF5 데이터셋 생성 (동적 차원 지원)"""
         import h5py
         
         self.logger.info(f"📦 새 데이터셋 생성: {self.dataset_path}")
@@ -408,35 +424,41 @@ class ChimchakmanDatasetGenerator:
             f.attrs['created_at'] = datetime.now().isoformat()
             f.attrs['version'] = '1.0'
             
-            # 각 설정별 특징 데이터셋
+            # 각 설정별 특징 데이터셋 (동적 차원)
             for config_name, features in features_dict.items():
-                config = self.config['dataset']['feature_configs'][config_name]
-                dims = config['dimensions']
+                actual_dims = len(features)  # 🆕 실제 특징 크기 사용
                 
-                # 특징 데이터셋
+                self.logger.info(f"   {config_name}: {actual_dims}차원 데이터셋 생성")
+                
+                # 특징 데이터셋 생성
                 f.create_dataset(f'features_{config_name}', 
-                               shape=(initial_size, dims),
-                               dtype='float32',
-                               compression=None)
+                            shape=(initial_size, actual_dims),
+                            dtype='float32',
+                            compression=None)
                 f[f'features_{config_name}'][0] = features
+                
+                # 🆕 실제 차원을 메타데이터로 저장 (참고용)
+                f.attrs[f'{config_name}_dimensions'] = actual_dims
             
             # 라벨 데이터셋
             f.create_dataset('labels', 
-                           shape=(initial_size,),
-                           dtype='int32',
-                           compression=None)
+                        shape=(initial_size,),
+                        dtype='int32',
+                        compression=None)
             f['labels'][0] = label
             
             # 클립 ID 데이터셋
             dt = h5py.special_dtype(vlen=str)
             f.create_dataset('clip_ids',
-                           shape=(initial_size,),
-                           dtype=dt,
-                           compression=None)
+                        shape=(initial_size,),
+                        dtype=dt,
+                        compression=None)
             f['clip_ids'][0] = clip_id
             
             # 현재 크기 추적
             f.attrs['current_size'] = 1
+            
+            self.logger.info(f"✅ 새 데이터셋 생성 완료 (초기 크기: {initial_size})")
     
     def _append_to_dataset(self, features_dict: Dict, label: int, clip_id: str):
         """기존 데이터셋에 추가"""

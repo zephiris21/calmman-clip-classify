@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import logging
 from datetime import datetime
-from scipy import stats
 
 # 프로젝트 루트로 이동
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -24,15 +23,18 @@ from utils.pipeline_utils import PipelineUtils
 
 class ChimchakmanDatasetGenerator:
     """
-    침착맨 재미도 데이터셋 생성기
+    침착맨 재미도 데이터셋 생성기 (완전 개선 버전)
     - HDF5 파일들에서 특징 추출
-    - 3가지 실험 설정 지원 (104/78/92차원)
-    - 엄격한 검증 정책 적용
+    - 동적 차원 지원 (설정 파일 dimensions 무시)
+    - VAD 필터링된 오디오 특징 + 발화 최대값
+    - 회귀/결정계수 완전 제거
+    - 안정성 강화 (0으로 나누기 방지, 음수 방지)
+    - 손상된 HDF5 파일 자동 복구
     - PipelineUtils 활용으로 기존 코드 재사용
     """
     
     def __init__(self, config_path: str = "pipeline/configs/dataset_config.yaml"):
-        print(f"🏗️ 데이터셋 생성기 초기화")
+        print(f"🏗️ 데이터셋 생성기 초기화 (완전 개선 버전)")
         print(f"   설정 파일: {config_path}")
         
         # PipelineUtils로 설정 로드
@@ -60,10 +62,13 @@ class ChimchakmanDatasetGenerator:
         # 출력 디렉토리 생성
         os.makedirs(self.dataset_output_dir, exist_ok=True)
         
-        self.logger.info("✅ 데이터셋 생성기 초기화 완료")
+        self.logger.info("✅ 데이터셋 생성기 초기화 완료 (완전 개선 버전)")
         self.logger.info(f"   입력 경로: {self.input_base_dir}")
         self.logger.info(f"   출력 경로: {self.dataset_path}")
         self.logger.info(f"   검증 정책: 구간별 최소 {self.min_frames_per_segment}프레임")
+        self.logger.info(f"   🆕 VAD 필터링된 오디오 특징 사용")
+        self.logger.info(f"   🆕 회귀/결정계수 완전 제거")
+        self.logger.info(f"   🆕 동적 차원 지원")
     
     def is_clip_already_processed(self, clip_id: str) -> bool:
         """클립이 이미 데이터셋에 있는지 확인"""
@@ -88,7 +93,7 @@ class ChimchakmanDatasetGenerator:
         except Exception as e:
             self.logger.warning(f"클립 중복 검사 실패: {e}")
             return False
-        """클립 폴더 스캔 및 자동 라벨링"""
+    
     def scan_clips(self) -> List[Dict]:
         """클립 폴더 스캔 및 자동 라벨링"""
         self.logger.info(f"📁 클립 폴더 스캔: {self.input_base_dir}")
@@ -130,8 +135,8 @@ class ChimchakmanDatasetGenerator:
         audio_file = None
         tension_file = None
         
-        base_dir = self.config['output']['base_dir']  # "dataset/preprocessed"
-        preprocessed_dir = self.config['output']['preprocessed_dir']  # "preprocessed_data"
+        base_dir = self.config['output']['base_dir']
+        preprocessed_dir = self.config['output']['preprocessed_dir']
         
         # 비디오 HDF5 찾기
         video_seq_dir = os.path.join(base_dir, preprocessed_dir, 
@@ -258,10 +263,10 @@ class ChimchakmanDatasetGenerator:
         return True, "통과"
     
     def extract_features(self, data: Dict, config_name: str) -> np.ndarray:
-        """특징 추출 (설정별) - RMS 회귀 특성 추가"""
+        """특징 추출 (설정별) - VAD 필터링된 오디오 특징 + 발화 최대값 + 회귀 완전 제거"""
         config = self.config['dataset']['feature_configs'][config_name]
         num_segments = config['segments']
-        use_regression = config['use_regression']
+        # use_regression 옵션 완전 무시 (회귀 제거)
         
         total_frames = len(data['emotions'])
         frames_per_segment = total_frames // num_segments
@@ -278,110 +283,87 @@ class ChimchakmanDatasetGenerator:
             segment_vad = data['vad_labels'][start_idx:end_idx]
             segment_face = data['face_detected'][start_idx:end_idx]
             
-            # 얼굴 있는 프레임만 사용
+            # 얼굴 있는 프레임만 사용 (감정 특징)
             valid_mask = segment_face > 0
             if np.sum(valid_mask) > 0:
                 valid_emotions = segment_emotions[valid_mask]
                 
-                # 양수 변환 후 감정 특징 계산
+                # 양수 변환 후 감정 특징 계산 (안정성 강화)
                 positive_emotions = np.maximum(valid_emotions, 0)
                 
                 # 감정 특징 (20차원: 평균 10 + 표준편차 10)
                 emotion_mean = np.mean(positive_emotions, axis=0)
                 emotion_std = np.std(positive_emotions, axis=0)
                 
-                # 회귀 특징 (20차원 추가)
-                if use_regression:
-                    emotion_slope = []
-                    emotion_r2 = []
-                    
-                    for dim in range(10):
-                        if len(positive_emotions) >= 3:  # 최소 3개 점 필요
-                            y = positive_emotions[:, dim]
-                            x = np.arange(len(y))
-                            slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-                            emotion_slope.append(slope)
-                            emotion_r2.append(max(0, r_value ** 2))  # 음수 방지
-                        else:
-                            emotion_slope.append(0.0)
-                            emotion_r2.append(0.0)
-                    
-                    emotion_features = np.concatenate([
-                        emotion_mean,      # 10차원
-                        emotion_std,       # 10차원  
-                        emotion_slope,     # 10차원
-                        emotion_r2         # 10차원
-                    ])  # 총 40차원
-                else:
-                    emotion_features = np.concatenate([
-                        emotion_mean,      # 10차원
-                        emotion_std        # 10차원
-                    ])  # 총 20차원
+                emotion_features = np.concatenate([
+                    emotion_mean,      # 10차원
+                    emotion_std        # 10차원
+                ])  # 총 20차원 (회귀 완전 제거!)
             else:
                 # 얼굴 없으면 0으로 채움
-                if use_regression:
-                    emotion_features = np.zeros(40)
-                else:
-                    emotion_features = np.zeros(20)
+                emotion_features = np.zeros(20)
             
-            # 🆕 오디오 특징 확장 (RMS 회귀 추가)
-            rms_mean = np.mean(segment_rms)
-            rms_std = np.std(segment_rms)
+            # 🆕 VAD 필터링된 오디오 특징 (4차원)
+            voice_mask = segment_vad > 0
+            non_voice_mask = segment_vad == 0
             
-            # RMS 회귀 분석
-            if len(segment_rms) >= 3 and np.std(segment_rms) > 1e-8:
-                x = np.arange(len(segment_rms))
-                slope, intercept, r_value, p_value, std_err = stats.linregress(x, segment_rms)
-                rms_slope = slope
-                rms_r2 = max(0, r_value ** 2)  # 음수 방지
+            # 발화 구간 RMS 특징 (0으로 나누기 방지)
+            if np.sum(voice_mask) > 0:
+                voice_rms_values = segment_rms[voice_mask]
+                voice_rms_mean = np.mean(voice_rms_values)
+                voice_rms_max = np.max(voice_rms_values)  # 🆕 발화 최대값!
             else:
-                rms_slope = 0.0
-                rms_r2 = 0.0
+                voice_rms_mean = 0.0
+                voice_rms_max = 0.0
             
-            # 오디오 특징 (4차원: 평균 + 표준편차 + 기울기 + R²)
+            # 비발화 구간 RMS (배경음) (0으로 나누기 방지)
+            if np.sum(non_voice_mask) > 0:
+                background_rms_mean = np.mean(segment_rms[non_voice_mask])
+            else:
+                background_rms_mean = 0.0
+            
+            # 전체 변동성 (항상 안전하게 계산)
+            total_rms_std = np.std(segment_rms) if len(segment_rms) > 0 else 0.0
+            
+            # 오디오 특징 (4차원)
             audio_features = np.array([
-                rms_mean,
-                rms_std,
-                rms_slope,
-                rms_r2
+                voice_rms_mean,      # 발화 평균 음량
+                voice_rms_max,       # 발화 최대 음량 (감정 피크!)
+                background_rms_mean, # 배경음 평균
+                total_rms_std        # 전체 변동성
             ])
             
-            # VAD 특징 (1차원: 발화 비율)
+            # VAD 특징 (1차원: 발화 비율) (0으로 나누기 방지)
             vad_features = np.array([
-                np.mean(segment_vad)
+                np.mean(segment_vad) if len(segment_vad) > 0 else 0.0
             ])
             
-            # 텐션 특징 (3차원: 평균 + 표준편차 + 최대값)
+            # 텐션 특징 (3차원: 평균 + 표준편차 + 최대값) (안정성 강화)
             segment_tension = data['tension_values'][start_idx:end_idx]
             
-            tension_features = np.array([
-                np.mean(segment_tension),
-                np.std(segment_tension),
-                np.max(segment_tension)
-            ])
-            
-            # 구간 특징 결합
-            if use_regression:
-                segment_features = np.concatenate([
-                    emotion_features,  # 40차원
-                    audio_features,    # 4차원 (기존 2차원 → 4차원)
-                    vad_features,      # 1차원
-                    tension_features   # 3차원
-                ])  # 총 48차원 (기존 46차원 → 48차원)
+            if len(segment_tension) > 0:
+                tension_features = np.array([
+                    np.mean(segment_tension),
+                    np.std(segment_tension),
+                    np.max(segment_tension)
+                ])
             else:
-                segment_features = np.concatenate([
-                    emotion_features,  # 20차원
-                    audio_features,    # 4차원 (기존 2차원 → 4차원)
-                    vad_features,      # 1차원
-                    tension_features   # 3차원
-                ])  # 총 28차원 (기존 26차원 → 28차원)
+                tension_features = np.zeros(3)
+            
+            # 구간 특징 결합 (모든 설정에서 동일한 28차원)
+            segment_features = np.concatenate([
+                emotion_features,  # 20차원 (회귀 완전 제거!)
+                audio_features,    # 4차원 (VAD 필터링 + 최대값)
+                vad_features,      # 1차원
+                tension_features   # 3차원
+            ])  # 총 28차원 (모든 config에서 동일)
             
             features.extend(segment_features)
         
         return np.array(features)
     
     def create_or_append_dataset(self, features_dict: Dict, label: int, clip_id: str):
-        """HDF5 데이터셋 생성 또는 추가 (안전한 초기화 로직)"""
+        """HDF5 데이터셋 생성 또는 추가 (안전한 초기화 로직 + 자동 복구)"""
         import h5py
         
         try:
@@ -395,7 +377,7 @@ class ChimchakmanDatasetGenerator:
                 self._create_new_dataset(features_dict, label, clip_id)
         
         except (KeyError, OSError, Exception) as e:
-            # current_size가 없거나 파일이 손상된 경우
+            # current_size가 없거나 파일이 손상된 경우 자동 복구
             self.logger.warning(f"기존 파일이 손상되어 새로 생성합니다: {self.dataset_path} (오류: {e})")
             
             # 기존 파일 삭제 후 새로 생성
@@ -409,7 +391,6 @@ class ChimchakmanDatasetGenerator:
             
             self._create_new_dataset(features_dict, label, clip_id)
     
-    
     def _create_new_dataset(self, features_dict: Dict, label: int, clip_id: str):
         """새 HDF5 데이터셋 생성 (동적 차원 지원)"""
         import h5py
@@ -422,7 +403,8 @@ class ChimchakmanDatasetGenerator:
             # 메타데이터
             f.attrs['dataset_name'] = self.config['dataset']['dataset_name']
             f.attrs['created_at'] = datetime.now().isoformat()
-            f.attrs['version'] = '1.0'
+            f.attrs['version'] = '2.0'  # 개선 버전
+            f.attrs['features'] = 'VAD_filtered_audio + voice_max + no_regression'
             
             # 각 설정별 특징 데이터셋 (동적 차원)
             for config_name, features in features_dict.items():
@@ -432,9 +414,9 @@ class ChimchakmanDatasetGenerator:
                 
                 # 특징 데이터셋 생성
                 f.create_dataset(f'features_{config_name}', 
-                            shape=(initial_size, actual_dims),
-                            dtype='float32',
-                            compression=None)
+                               shape=(initial_size, actual_dims),
+                               dtype='float32',
+                               compression=None)
                 f[f'features_{config_name}'][0] = features
                 
                 # 🆕 실제 차원을 메타데이터로 저장 (참고용)
@@ -442,17 +424,17 @@ class ChimchakmanDatasetGenerator:
             
             # 라벨 데이터셋
             f.create_dataset('labels', 
-                        shape=(initial_size,),
-                        dtype='int32',
-                        compression=None)
+                           shape=(initial_size,),
+                           dtype='int32',
+                           compression=None)
             f['labels'][0] = label
             
             # 클립 ID 데이터셋
             dt = h5py.special_dtype(vlen=str)
             f.create_dataset('clip_ids',
-                        shape=(initial_size,),
-                        dtype=dt,
-                        compression=None)
+                           shape=(initial_size,),
+                           dtype=dt,
+                           compression=None)
             f['clip_ids'][0] = clip_id
             
             # 현재 크기 추적
@@ -493,7 +475,7 @@ class ChimchakmanDatasetGenerator:
     
     def generate_dataset(self) -> Dict:
         """전체 데이터셋 생성"""
-        PipelineUtils.print_step_banner(6, "데이터셋 생성", "파이프라인 결과를 통합 데이터셋으로 변환")
+        PipelineUtils.print_step_banner(6, "데이터셋 생성", "파이프라인 결과를 통합 데이터셋으로 변환 (완전 개선 버전)")
         
         # 클립 스캔
         clips = self.scan_clips()
@@ -584,7 +566,7 @@ def main():
     """메인 실행"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='침착맨 재미도 데이터셋 생성')
+    parser = argparse.ArgumentParser(description='침착맨 재미도 데이터셋 생성 (완전 개선 버전)')
     parser.add_argument('--config', default='pipeline/configs/dataset_config.yaml',
                        help='설정 파일 경로')
     
@@ -594,8 +576,15 @@ def main():
         generator = ChimchakmanDatasetGenerator(args.config)
         stats = generator.generate_dataset()
         
-        print(f"\n✅ 데이터셋 생성 성공!")
+        print(f"\n✅ 데이터셋 생성 성공! (완전 개선 버전)")
         print(f"📄 저장 위치: {generator.dataset_path}")
+        print(f"🆕 주요 개선사항:")
+        print(f"   - VAD 필터링된 오디오 특징")
+        print(f"   - 발화 최대값으로 재미 순간 포착")
+        print(f"   - 회귀/결정계수 완전 제거")
+        print(f"   - 동적 차원 지원 (설정 파일 dimensions 무시)")
+        print(f"   - 안정성 강화 (0으로 나누기 방지, 음수 방지)")
+        print(f"   - 손상된 HDF5 파일 자동 복구")
         
     except Exception as e:
         print(f"❌ 데이터셋 생성 실패: {e}")
