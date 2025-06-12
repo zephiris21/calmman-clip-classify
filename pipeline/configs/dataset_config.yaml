@@ -5,8 +5,8 @@
 # 파이프라인 전체 설정
 # =============================================================================
 pipeline:
-  name: "침착맨 재미도 분석 시스템"
-  version: "2.0.0"
+  name: "데이터셋 생성 테스트 파이프라인인"
+  version: "1.0.0"
   
   # 파이프라인 단계 정의
   steps:
@@ -21,11 +21,78 @@ pipeline:
   execution:
     auto_mode: 0                 # 0: 자동 전체 실행, 1: 단계별 실행 (사용자 입력)
 
+optional_steps:
+  emotion_highlights: true     # 4단계 실행 여부
+  angry_classification: true   # 5단계 실행 여부  
+  visualization: true          # 시각화 실행 여부
+
+
+# =============================================================================
+# 데이터셋 생성 설정 (NEW)
+# =============================================================================
+dataset:
+  # 입력 설정
+  input_base_dir: "dataset/clips"        # 클립 폴더 경로
+  clip_extensions: [".mp4", ".avi", ".mov"]
+  label_mapping:
+    funny: 1                             # dataset/clips/funny/*.mp4 → label 1
+    boring: 0                            # dataset/clips/boring/*.mp4 → label 0
+  
+   # 최종 데이터셋 저장 (별도 경로)
+  dataset_output_dir: "dataset"          # dataset/dataset.h5로 저장
+  dataset_name: "chimchakman_funny_v1"   
+  hdf5_filename: "dataset.h5"
+
+  # 검증 정책 (엄격한 검증)
+  validation:
+    min_frames_per_segment: 8            # 구간별 최소 얼굴 프레임 수
+    min_clip_duration: 12.0              # 최소 클립 길이 (초)
+    max_clip_duration: 60.0              # 최대 클립 길이 (초)
+    require_all_segments: true           # 모든 구간이 조건 만족해야 함
+  
+  # 3가지 실험 설정
+  feature_configs:
+    config_1:
+      name: "4segments_112d"
+      segments: 4                        # 4구간 분할
+      dimensions: 112                    # 4 × 28차원
+      
+    config_2:
+      name: "3segments_84d" 
+      segments: 3                        # 3구간 분할
+      dimensions: 84                     # 3 × 28차원
+
+      
+    config_3:
+      name: "2segments_96d"
+      segments: 2                        # 2구간 분할
+      dimensions: 96                     # 2 × 48차원 (감정분류 회귀 포함)
+
+  
+  # 배치 처리 설정
+  batch_processing:
+    max_workers: 2                       # 동시 처리 클립 수 (GPU 메모리 고려)
+    checkpoint_interval: 5               # N개마다 중간 저장
+    resume_from_checkpoint: true         # 중단 지점부터 재시작
+    skip_existing: true                  # 이미 처리된 클립 스킵
+  
+  # 진행률 추적
+  progress:
+    log_interval: 1                      # N개마다 로그 출력
+    save_progress_file: true             # 진행률 JSON 파일 저장
+    
+  # HDF5 저장 설정  
+  hdf5:
+    compression: "gzip"                  # 압축 방식
+    compression_opts: 6                  # 압축 레벨
+    initial_size: 200                    # 초기 할당 크기
+    chunk_size: 50                       # 청크 크기
+
 # =============================================================================
 # 통합 출력 경로 설정
 # =============================================================================
 output:
-  base_dir: "outputs"                    # 프로젝트 루트/outputs
+  base_dir: "dataset/preprocessed"                    # 프로젝트 루트/dataset/preprocessed
   classification: "classification"       # 썸네일 분류 결과
   highlights: "highlights"               # 감정 하이라이트 이미지
   visualization: "visualization"         # 그래프, 차트들
@@ -33,7 +100,7 @@ output:
   preprocessed_dir: "preprocessed_data"
   video_sequence_dir: "video_sequences"
   audio_sequence_dir: "audio_sequences"
-
+  tension_analysis_dir: "tension_data"
 # =============================================================================
 # 1단계: 비디오 전처리 설정
 # =============================================================================
@@ -163,7 +230,7 @@ visualization:
 # =============================================================================
 logging:
   level: 'INFO'                  # DEBUG, INFO, WARNING, ERROR
-  console_output: true           # 콘솔 출력 여부
+  console_output: false           # 콘솔 출력 여부
   file_output: true              # 파일 출력 여부
   log_filename: 'pipeline_{timestamp}.log'
   save_detailed_log: true
