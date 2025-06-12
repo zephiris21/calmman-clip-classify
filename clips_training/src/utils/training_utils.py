@@ -149,7 +149,7 @@ class TrainingUtils(PipelineUtils):
                 current_size = f.attrs['current_size']
                 
                 # 특징 데이터 로드 (실제 차원 사용)
-                features_key = f'features_config{target_config}'
+                features_key = f'features_config_{target_config}'
                 if features_key not in f:
                     available_configs = [key for key in f.keys() if key.startswith('features_config')]
                     raise KeyError(f"config{target_config}를 찾을 수 없습니다. 사용 가능한 설정: {available_configs}")
