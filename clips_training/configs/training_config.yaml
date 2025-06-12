@@ -1,0 +1,218 @@
+# 침착맨 클립 재미도 분류 학습 설정
+# 핵심 설정만 포함 (전처리 관련 설정 제외)
+
+# =============================================================================
+# 학습 프로젝트 정보
+# =============================================================================
+training:
+  name: "침착맨 클립 재미도 분류"
+  version: "1.0.0"
+  description: "침착맨 영상 클립의 재미도를 Funny/Boring으로 이진 분류"
+
+# =============================================================================
+# 데이터 설정
+# =============================================================================
+data:
+  dataset_path: "dataset/dataset.h5"
+  target_config: 1              # config1(112차원), config2(84차원), config3(56차원) 중 선택
+  test_size: 0.2               # 테스트 셋 비율
+  validation_size: 0.2         # 검증 셋 비율 (train에서 분할)
+  random_state: 42
+  stratify: true               # 클래스 균형 유지
+  
+  # 클래스 정보
+  classes:
+    boring: 0
+    funny: 1
+
+# =============================================================================
+# 특징 분석 설정 (EDA 및 해석용)
+# =============================================================================
+features:
+  # 28차원 블록 구조 (구간별 반복)
+  block_structure:
+    emotion_block: [0, 20]      # 감정 평균(10) + 표준편차(10)
+    audio_block: [20, 24]       # VAD 필터링된 오디오 특징(4)
+    vad_block: [24, 25]         # 발화 비율(1) 
+    tension_block: [25, 28]     # 텐션 통계(3)
+  
+  # 핵심 특징 (가설 기반 - EDA에서 검증할 것들)
+  key_features:
+    audio_critical:
+      - "voice_rms_max"         # 발화 최대값 (재미 순간 포착!)
+      - "background_rms_mean"   # 배경음 (웃음+효과음)
+      - "total_rms_std"         # 음량 변동성
+    emotion_critical:
+      - "arousal_mean"          # 흥분도 평균
+      - "happiness_mean"        # 행복 평균  
+      - "anger_mean"            # 화남 평균
+      - "arousal_std"           # 흥분도 변동성
+    tension_critical:
+      - "tension_max"           # 텐션 피크
+      - "tension_mean"          # 평균 텐션
+      - "tension_std"           # 텐션 변동성
+    vad_critical:
+      - "vad_ratio"             # 발화 비율
+
+# =============================================================================
+# 모델 설정
+# =============================================================================
+model:
+  algorithm: "xgboost"          # 주요 알고리즘
+  cv_folds: 5                   # 교차 검증 폴드 수
+  random_state: 42
+  
+  # XGBoost 하이퍼파라미터
+  xgboost:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 1
+    gamma: 0
+    reg_alpha: 0
+    reg_lambda: 1
+    objective: "binary:logistic"
+    eval_metric: "logloss"
+  
+  # 다른 모델들 (비교 실험용)
+  alternatives:
+    random_forest:
+      n_estimators: 100
+      max_depth: 10
+      random_state: 42
+    
+    logistic_regression:
+      C: 1.0
+      random_state: 42
+      max_iter: 1000
+
+# =============================================================================
+# 전처리 설정
+# =============================================================================
+preprocessing:
+  scaler: "standard"            # standard, minmax, robust, none
+  handle_outliers: false        # 이상치 처리 여부
+  feature_selection: false      # 특징 선택 여부
+
+# =============================================================================
+# 평가 설정  
+# =============================================================================
+evaluation:
+  metrics:
+    - "accuracy"
+    - "precision" 
+    - "recall"
+    - "f1"
+    - "roc_auc"
+  
+  # 피처 중요도 분석
+  feature_importance:
+    top_n: 20                   # 상위 N개 특징 시각화
+    save_plot: true
+    
+  # 모델 해석
+  interpretation:
+    shap_analysis: false        # SHAP 분석 (시간 소요)
+    permutation_importance: true
+
+# =============================================================================
+# 출력 설정
+# =============================================================================
+output:
+  base_dir: "clips_training"
+  models_dir: "models"          # clips_training/models/
+  results_dir: "results"        # clips_training/results/
+  logs_dir: "logs"              # clips_training/logs/
+  
+  # 모델 저장 설정
+  save_model: true
+  save_scaler: true
+  save_feature_names: true
+  
+  # 결과 저장 설정
+  save_predictions: true
+  save_metrics: true
+  save_confusion_matrix: true
+
+# =============================================================================
+# 시각화 설정
+# =============================================================================
+visualization:
+  # 기본 설정
+  figure_size: [12, 8]
+  dpi: 150
+  style: "seaborn-v0_8"
+  
+  # 색상 팔레트 (기존 파이프라인과 일관성)
+  colors:
+    funny: "#FF6B6B"            # 빨강계열 (재밌음)
+    boring: "#4ECDC4"           # 청록계열 (지루함)
+    highlight: "#FFD93D"        # 노랑 (강조)
+    neutral: "#95A5A6"          # 회색 (중성)
+  
+  # EDA 시각화
+  eda:
+    correlation_heatmap: true
+    distribution_plots: true
+    box_plots: true
+    feature_importance_plot: true
+  
+  # 성능 시각화
+  performance:
+    confusion_matrix: true
+    roc_curve: true
+    learning_curve: false       # 시간 소요
+
+# =============================================================================
+# 분석 설정
+# =============================================================================
+analysis:
+  # 상관관계 분석
+  correlation_threshold: 0.8    # 높은 상관관계 경고 임계값
+  
+  # 이상치 탐지
+  outlier_detection:
+    method: "iqr"               # iqr, zscore, isolation_forest
+    threshold: 1.5
+  
+  # 클래스 불균형 분석
+  class_balance:
+    check_imbalance: true
+    imbalance_threshold: 0.1    # 클래스 비율 차이 임계값
+
+# =============================================================================
+# 로깅 설정 (PipelineUtils 스타일)
+# =============================================================================
+logging:
+  level: 'INFO'                 # DEBUG, INFO, WARNING, ERROR
+  console_output: true          # 콘솔 출력 여부
+  file_output: true             # 파일 출력 여부
+  log_filename: 'training_{timestamp}.log'
+  
+  # 상세 로깅 설정
+  log_data_info: true           # 데이터 정보 로깅
+  log_model_params: true        # 모델 파라미터 로깅  
+  log_feature_importance: true  # 피처 중요도 로깅
+
+# =============================================================================
+# 실험 관리 설정
+# =============================================================================
+experiment:
+  # 실험 추적
+  track_experiments: true
+  experiment_name: "baseline_xgboost"
+  
+  # 재현성 설정
+  set_seed: true
+  seed_value: 42
+  
+  # 체크포인트
+  save_checkpoints: false       # 대용량 모델 아니므로 불필요
+  
+  # 조기 종료 (XGBoost early stopping)
+  early_stopping:
+    enabled: false
+    rounds: 10
+    metric: "logloss"
