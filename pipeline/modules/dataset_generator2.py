@@ -366,15 +366,33 @@ class ChimchakmanDatasetGenerator:
         return np.array(features)
     
     def create_or_append_dataset(self, features_dict: Dict, label: int, clip_id: str):
-        """HDF5 데이터셋 생성 또는 추가"""
+        """HDF5 데이터셋 생성 또는 추가 (안전한 초기화 로직)"""
         import h5py
         
-        if not os.path.exists(self.dataset_path):
-            # 새 데이터셋 생성
+        try:
+            # 기존 파일이 있고 유효하면 append
+            if os.path.exists(self.dataset_path):
+                with h5py.File(self.dataset_path, 'r') as f:
+                    current_size = f.attrs['current_size']  # 이게 성공하면 유효한 파일
+                
+                self._append_to_dataset(features_dict, label, clip_id)
+            else:
+                self._create_new_dataset(features_dict, label, clip_id)
+        
+        except (KeyError, OSError, Exception) as e:
+            # current_size가 없거나 파일이 손상된 경우
+            self.logger.warning(f"기존 파일이 손상되어 새로 생성합니다: {self.dataset_path} (오류: {e})")
+            
+            # 기존 파일 삭제 후 새로 생성
+            if os.path.exists(self.dataset_path):
+                try:
+                    os.remove(self.dataset_path)
+                    self.logger.info(f"손상된 파일 삭제: {self.dataset_path}")
+                except OSError as remove_error:
+                    self.logger.error(f"파일 삭제 실패: {remove_error}")
+                    raise
+            
             self._create_new_dataset(features_dict, label, clip_id)
-        else:
-            # 기존 데이터셋에 추가
-            self._append_to_dataset(features_dict, label, clip_id)
     
     def _create_new_dataset(self, features_dict: Dict, label: int, clip_id: str):
         """새 HDF5 데이터셋 생성"""

@@ -53,41 +53,32 @@ dataset:
   # 3가지 실험 설정
   feature_configs:
     config_1:
-      name: "4segments_104d"
+      name: "4segments_112d"
       segments: 4                        # 4구간 분할
-      dimensions: 104                    # 4 × 26차원
-      use_regression: false              # 회귀 특성 미사용
+      dimensions: 112                    # 4 × 28차원
       
     config_2:
-      name: "3segments_78d" 
+      name: "3segments_84d" 
       segments: 3                        # 3구간 분할
-      dimensions: 78                     # 3 × 26차원
-      use_regression: false
+      dimensions: 84                     # 3 × 28차원
+
       
     config_3:
-      name: "2segments_92d"
+      name: "2segments_96d"
       segments: 2                        # 2구간 분할
-      dimensions: 92                     # 2 × 46차원 (회귀 포함)
-      use_regression: true               # 회귀 특성 사용
+      dimensions: 96                     # 2 × 48차원 (감정분류 회귀 포함)
+
   
   # 배치 처리 설정
   batch_processing:
-    max_workers: 2                       # 동시 처리 클립 수 (GPU 메모리 고려)
-    checkpoint_interval: 5               # N개마다 중간 저장
-    resume_from_checkpoint: true         # 중단 지점부터 재시작
+    max_workers: 1                       # 동시 처리 클립 수 (GPU 메모리 고려)
     skip_existing: true                  # 이미 처리된 클립 스킵
   
   # 진행률 추적
   progress:
-    log_interval: 1                      # N개마다 로그 출력
-    save_progress_file: true             # 진행률 JSON 파일 저장
-    
-  # HDF5 저장 설정  
-  hdf5:
-    compression: "gzip"                  # 압축 방식
-    compression_opts: 6                  # 압축 레벨
-    initial_size: 200                    # 초기 할당 크기
-    chunk_size: 50                       # 청크 크기
+    show_progress_bar: true              # 간단한 진행률 바 표시
+    update_interval: 1                   # 매 파일마다 업데이트
+     
 
 # =============================================================================
 # 통합 출력 경로 설정
@@ -231,7 +222,7 @@ visualization:
 # =============================================================================
 logging:
   level: 'INFO'                  # DEBUG, INFO, WARNING, ERROR
-  console_output: true           # 콘솔 출력 여부
+  console_output: false           # 콘솔 출력 여부
   file_output: true              # 파일 출력 여부
   log_filename: 'pipeline_{timestamp}.log'
   save_detailed_log: true

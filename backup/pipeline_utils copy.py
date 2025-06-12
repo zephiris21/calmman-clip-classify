@@ -374,6 +374,8 @@ class PipelineUtils:
         
         # 4. 기본 디렉토리에서 패턴 매칭
         if os.path.exists(base_dir):
+        # 4. 기본 디렉토리에서 패턴 매칭
+        if os.path.exists(base_dir):
             # 정확한 파일명 매칭
             exact_path = os.path.join(base_dir, input_path)
             if os.path.exists(exact_path):
