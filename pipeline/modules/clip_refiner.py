@@ -106,8 +106,12 @@ class ClipRefiner:
         # 결과 저장
         # 출력 디렉토리 경로
         safe_video_name = PipelineUtils.safe_filename(video_name)
+        
+        # 기본 출력 디렉토리 확인 (config에 없는 경우 기본값 사용)
+        base_dir = self.config.get('output', {}).get('base_dir', 'outputs/clip_analysis')
+        
         output_dir = os.path.join(
-            self.config['output']['base_dir'],
+            base_dir,
             safe_video_name
         )
         os.makedirs(output_dir, exist_ok=True)
@@ -256,8 +260,12 @@ def main():
     # 설정 로드
     config = PipelineUtils.load_config(args.config)
     
-    # 출력 디렉토리 설정
-    output_dirs = PipelineUtils.setup_output_directories(config)
+    # 출력 디렉토리 설정 제거 (오류 발생)
+    # 대신 출력 디렉토리 설정이 필요한 경우 직접 처리
+    if 'output' not in config:
+        config['output'] = {'base_dir': 'outputs/clip_analysis'}
+    elif 'base_dir' not in config['output']:
+        config['output']['base_dir'] = 'outputs/clip_analysis'
     
     # 로깅 설정 (logging 키가 없을 경우 기본 로깅 설정 사용)
     logger = logging.getLogger(__name__)
