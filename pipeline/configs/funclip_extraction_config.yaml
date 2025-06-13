@@ -5,7 +5,7 @@ system:
   
 # 1단계: 하이라이트 클러스터링
 clustering:
-  eps: 9                    # DBSCAN 거리 임계값 (초)
+  eps: 12                    # DBSCAN 거리 임계값 (초)
   min_samples: 1            # 최소 샘플 수
   expansion_buffer: 3       # 단일 클러스터 확장 버퍼 (초)
 
