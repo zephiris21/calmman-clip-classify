@@ -14,7 +14,7 @@ window_generation:
   length_range: {min: 18, max: 40, step: 1}   # 윈도우 길이들 (초)
   step_size: 1                      # 슬라이딩 간격 (초)
   position_ratio: 0.75              # 하이라이트 위치 비율 (3/4 지점)
-  full_grid_search: true           # 전체 그리드 서치 모드 (기본값: false)
+  full_grid_search: false           # 전체 그리드 서치 모드 (기본값: false)
   grid_step: 1.0                    # 그리드 서치 간격 (초)
 
   
