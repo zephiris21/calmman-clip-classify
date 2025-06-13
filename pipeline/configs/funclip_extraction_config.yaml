@@ -25,7 +25,7 @@ model:
   
 # 4단계: NMS 로직 - 클립 선별 (기본값, select_clips.py에서 오버라이드)
 selection:
-  iou_threshold: 0.5               # NMS IoU 임계값 (0~1) 0이면 약간이라도 겹치는 클립은 버려짐
+  iou_threshold: 0.3               # NMS IoU 임계값 (0~1) 0이면 약간이라도 겹치는 클립은 버려짐
   target_clips: 10                  # 추출할 클립 개수
   min_score: 0.5                   # 최소 재미도 점수
   min_duration: 15                 # 최소 클립 길이
