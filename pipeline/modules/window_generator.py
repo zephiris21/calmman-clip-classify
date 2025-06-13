@@ -55,6 +55,10 @@ class WindowGenerator:
         self.step_size = window_config['step_size']  # 1초
         self.position_ratio = window_config['position_ratio']  # 0.75 (3/4 지점)
         
+        # 전체 그리드 서치 옵션
+        self.full_grid_search = window_config.get('full_grid_search', False)
+        self.grid_step = window_config.get('grid_step', 1.0)
+        
         # 배치 처리 설정
         self.feature_batch_size = 100   # 특징 추출 배치 크기
         self.prediction_batch_size = 500  # 예측 배치 크기
@@ -69,6 +73,13 @@ class WindowGenerator:
         self.logger.info(f"✅ 윈도우 생성기 초기화 완료")
         self.logger.info(f"   윈도우 길이: {len(self.window_lengths)}개 ({min(self.window_lengths)}~{max(self.window_lengths)}초)")
         self.logger.info(f"   위치 비율: {self.position_ratio} (3/4 지점 배치)")
+        
+        if self.full_grid_search:
+            self.logger.info(f"   모드: 전체 그리드 서치 (클러스터 무시)")
+            self.logger.info(f"   그리드 간격: {self.grid_step}초")
+        else:
+            self.logger.info(f"   모드: 클러스터 기반 윈도우 생성")
+            
         self.logger.info(f"   XGBoost 모델: {os.path.relpath(model_path)}")
         self.logger.info(f"   배치 크기: 특징추출 {self.feature_batch_size}, 예측 {self.prediction_batch_size}")
     
@@ -464,7 +475,7 @@ class WindowGenerator:
         전체 윈도우 생성 및 점수 계산 프로세스
         
         Args:
-            clusters_json_path (str): 클러스터 JSON 파일 경로
+            clusters_json_path (str): 클러스터 JSON 파일 경로 (full_grid_search 모드에서는 무시될 수 있음)
             video_h5_path (str): 비디오 HDF5 파일 경로
             audio_h5_path (str): 오디오 HDF5 파일 경로
             tension_json_path (str): 텐션 JSON 파일 경로
@@ -474,37 +485,61 @@ class WindowGenerator:
         """
         self.logger.info("🔍 윈도우 생성 및 점수 계산 프로세스 시작")
         
-        # 1. 클러스터 로드
-        cluster_data = self.load_clusters(clusters_json_path)
-        
-        # 2. 파이프라인 데이터 로드
+        # 1. 파이프라인 데이터 로드
         synced_data = self.load_pipeline_data(video_h5_path, audio_h5_path, tension_json_path)
         
-        # 3. 윈도우 생성
-        windows = self.generate_cluster_windows(cluster_data, synced_data['duration'])
+        # 2. 윈도우 생성 (모드에 따라 분기)
+        if self.full_grid_search:
+            # 전체 그리드 서치 모드
+            self.logger.info("⚙️ 전체 그리드 서치 모드로 실행...")
+            
+            # 더미 클러스터 파일 생성 (클러스터 경로가 제공되지 않은 경우)
+            if not clusters_json_path or not os.path.exists(clusters_json_path):
+                self.logger.info("📄 더미 클러스터 파일 생성...")
+                clusters_json_path = self._create_dummy_cluster_file(tension_json_path, synced_data['duration'])
+                self.logger.info(f"   클러스터 파일 경로: {clusters_json_path}")
+            
+            # 전체 그리드 서치 윈도우 생성
+            windows = self.generate_full_grid_windows(synced_data['duration'])
+            
+            # 클러스터 데이터 로드 (메타데이터 용)
+            cluster_data = self.load_clusters(clusters_json_path)
+        else:
+            # 클러스터 기반 모드 (기존 로직)
+            self.logger.info("⚙️ 클러스터 기반 모드로 실행...")
+            
+            # 클러스터 로드
+            cluster_data = self.load_clusters(clusters_json_path)
+            
+            # 클러스터 기반 윈도우 생성
+            windows = self.generate_cluster_windows(cluster_data, synced_data['duration'])
         
         if not windows:
             raise ValueError("생성된 윈도우가 없습니다. 클러스터나 영상 길이를 확인하세요.")
         
-        # 4. 특징 추출
+        # 3. 특징 추출
         features = self.extract_features_for_windows(windows, synced_data)
         
-        # 5. XGBoost 예측
+        # 4. XGBoost 예측
         fun_scores = self.evaluate_with_xgb(features)
         
-        # 6. 결과 조합
+        # 5. 결과 조합
         for i, window in enumerate(windows):
             window['fun_score'] = fun_scores[i]
         
         # 비디오 이름 가져오기 (클러스터 메타데이터에서)
         video_name = cluster_data.get('metadata', {}).get('video_name', 'unknown')
         
-        # 7. 결과 구성
+        # 검색 모드 확인
+        search_mode = cluster_data.get('metadata', {}).get('search_mode', 'cluster_based')
+        
+        # 6. 결과 구성
         result = {
             'metadata': {
                 'video_name': video_name,
                 'total_windows': len(windows),
                 'video_duration': synced_data['duration'],
+                'search_mode': search_mode,
                 'score_statistics': {
                     'mean': float(np.mean(fun_scores)),
                     'std': float(np.std(fun_scores)),
@@ -523,6 +558,8 @@ class WindowGenerator:
                 'window_lengths': self.window_lengths,
                 'position_ratio': self.position_ratio,
                 'step_size': self.step_size,
+                'full_grid_search': self.full_grid_search,
+                'grid_step': self.grid_step if self.full_grid_search else None,
                 'model_path': os.path.relpath(self.model.get_booster().save_config())
                 if hasattr(self.model, 'get_booster') else 'xgb_model'
             },
@@ -530,6 +567,7 @@ class WindowGenerator:
         }
         
         self.logger.info("🔍 윈도우 생성 및 점수 계산 완료!")
+        self.logger.info(f"   모드: {'전체 그리드 서치' if self.full_grid_search else '클러스터 기반'}")
         self.logger.info(f"   비디오: {video_name}")
         self.logger.info(f"   최종 윈도우: {len(windows)}개")
         self.logger.info(f"   평균 재미도: {np.mean(fun_scores):.3f}")
@@ -570,6 +608,153 @@ class WindowGenerator:
         except Exception as e:
             self.logger.error(f"❌ 점수 윈도우 저장 실패: {e}")
             raise
+    
+    def generate_full_grid_windows(self, video_duration: float) -> List[Dict]:
+        """
+        전체 영상에 대한 그리드 서치 윈도우 생성
+        
+        Args:
+            video_duration (float): 영상 전체 길이 (초)
+            
+        Returns:
+            List[Dict]: 생성된 윈도우 리스트
+        """
+        self.logger.info("🔍 전체 그리드 서치 윈도우 생성 시작...")
+        
+        windows = []
+        window_id = 0
+        
+        # 각 윈도우 길이별 윈도우 생성
+        for length in self.window_lengths:
+            # 시작 지점 범위 계산 (0초부터 영상 끝까지)
+            max_start = video_duration - length
+            
+            # 슬라이딩 윈도우 생성 (grid_step 간격)
+            start = 0
+            while start <= max_start:
+                end_time = start + length
+                
+                # 윈도우 생성
+                windows.append({
+                    'id': window_id,
+                    'start_time': float(start),
+                    'end_time': float(end_time),
+                    'duration': length,
+                    'cluster_id': 0,  # 전체 그리드 서치는 모든 윈도우가 하나의 가상 클러스터에 속함
+                    'highlight_time': float(start + (length * self.position_ratio)),  # 3/4 지점
+                    'highlight_tension': 0.0  # 텐션 값은 분석 시 실제로 계산됨
+                })
+                window_id += 1
+                
+                # 다음 시작점 (grid_step 간격)
+                start += self.grid_step
+        
+        self.logger.info(f"✅ 전체 그리드 서치 완료: {len(windows)}개 윈도우")
+        self.logger.info(f"   윈도우 길이: {len(self.window_lengths)}개 ({min(self.window_lengths)}~{max(self.window_lengths)}초)")
+        self.logger.info(f"   슬라이딩 간격: {self.grid_step}초")
+        
+        return windows
+    
+    def _create_dummy_cluster_file(self, tension_json_path: str, video_duration: float) -> str:
+        """
+        전체 그리드 서치를 위한 더미 클러스터 파일 생성
+        
+        Args:
+            tension_json_path (str): 텐션 JSON 파일 경로 (비디오 이름 추출용)
+            video_duration (float): 영상 전체 길이 (초)
+            
+        Returns:
+            str: 생성된 더미 클러스터 파일 경로
+        """
+        # 비디오 이름 추출
+        video_name = self._extract_video_name_from_tension(tension_json_path)
+        
+        # 더미 클러스터 데이터 생성
+        dummy_cluster = {
+            'cluster_id': 0,
+            'original_label': 0,
+            'is_expanded': False,
+            'points': [
+                # 시작점
+                {
+                    'timestamp': 0.0,
+                    'tension': 0.0,
+                    'type': 'virtual_start'
+                },
+                # 중간점
+                {
+                    'timestamp': video_duration / 2,
+                    'tension': 0.0,
+                    'type': 'peak'
+                },
+                # 끝점
+                {
+                    'timestamp': video_duration,
+                    'tension': 0.0,
+                    'type': 'virtual_end'
+                }
+            ],
+            'span': {
+                'start': 0.0,
+                'end': video_duration,
+                'duration': video_duration
+            }
+        }
+        
+        # 전체 데이터 구성
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        cluster_data = {
+            'metadata': {
+                'video_name': video_name,
+                'source_file': os.path.basename(tension_json_path),
+                'total_highlights': 1,
+                'total_clusters': 1,
+                'single_expanded_count': 0,
+                'clustered_at': datetime.now().isoformat(),
+                'search_mode': 'full_grid',
+                'config': {
+                    'full_grid_search': True,
+                    'grid_step': self.grid_step
+                }
+            },
+            'clusters': [dummy_cluster]
+        }
+        
+        # 파일 저장
+        output_dir = os.path.join(project_root, f"outputs/clip_analysis/{video_name}")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        output_path = os.path.join(output_dir, f"clusters_{video_name}_full_grid_{timestamp}.json")
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(cluster_data, f, indent=2, ensure_ascii=False)
+        
+        self.logger.info(f"💾 더미 클러스터 파일 생성 완료: {os.path.relpath(output_path, project_root)}")
+        self.logger.info(f"   전체 그리드 서치 모드 - 전체 영상 범위: 0.0~{video_duration}초")
+        
+        return output_path
+    
+    def _extract_video_name_from_tension(self, tension_json_path: str) -> str:
+        """텐션 JSON 파일명에서 비디오 이름 추출"""
+        filename = os.path.basename(tension_json_path)
+        # tension_f_001_박정민_유튜브_살리기_11.0_24.0_20250612_135829.json
+        # → f_001_박정민_유튜브_살리기_11.0_24.0
+        if filename.startswith('tension_'):
+            name_part = filename[8:]  # 'tension_' 제거
+            # 마지막 타임스탬프 부분 제거 (_20250612_135829.json)
+            parts = name_part.split('_')
+            if len(parts) >= 3:
+                # 마지막 2개 부분이 날짜+시간 형식이면 제거
+                if parts[-1].endswith('.json'):
+                    parts[-1] = parts[-1].replace('.json', '')
+                if len(parts) > 2 and len(parts[-1]) == 6 and parts[-1].isdigit():  # 시간 부분
+                    parts = parts[:-1]
+                if len(parts) > 2 and len(parts[-1]) == 8 and parts[-1].isdigit():  # 날짜 부분
+                    parts = parts[:-1]
+                return '_'.join(parts)
+        
+        # 추출 실패 시 확장자만 제거
+        return os.path.splitext(filename)[0]
 
 
 def main():
@@ -580,12 +765,14 @@ def main():
     os.chdir(project_root)
     
     parser = argparse.ArgumentParser(description='윈도우 생성 및 재미도 점수 계산')
-    parser.add_argument('clusters_json', help='클러스터 JSON 파일 경로')
+    parser.add_argument('clusters_json', nargs='?', help='클러스터 JSON 파일 경로 (full-grid 모드에서는 선택적)')
     parser.add_argument('video_h5', help='비디오 HDF5 파일 경로')
     parser.add_argument('audio_h5', help='오디오 HDF5 파일 경로')
     parser.add_argument('tension_json', help='텐션 JSON 파일 경로')
     parser.add_argument('--output', help='출력 JSON 경로')
     parser.add_argument('--config', help='Config 파일 경로')
+    parser.add_argument('--full-grid', action='store_true', 
+                        help='클러스터링 없이 전체 그리드 서치 실행 (clusters_json 인자는 선택적)')
     
     args = parser.parse_args()
     
@@ -599,9 +786,20 @@ def main():
         # 윈도우 생성기 실행
         generator = WindowGenerator(config_path=args.config)
         
+        # --full-grid 옵션 적용
+        if args.full_grid:
+            generator.full_grid_search = True
+            # clusters_json이 제공되지 않은 경우 None으로 설정
+            clusters_json_path = args.clusters_json if args.clusters_json else None
+        else:
+            # 클러스터 JSON 필수 확인
+            if not args.clusters_json:
+                raise ValueError("clusters_json 인자가 필요합니다. full-grid 모드를 사용하려면 --full-grid 옵션을 추가하세요.")
+            clusters_json_path = args.clusters_json
+        
         # 윈도우 생성 및 점수 계산
         result = generator.generate_and_score_windows(
-            args.clusters_json,
+            clusters_json_path,
             args.video_h5,
             args.audio_h5,
             args.tension_json
@@ -613,12 +811,19 @@ def main():
         else:
             # 기본 출력 경로 생성
             # 클러스터 경로에서 디렉토리 구조 유지하여 저장
-            clusters_dir = os.path.dirname(args.clusters_json)
+            if clusters_json_path:
+                clusters_dir = os.path.dirname(clusters_json_path)
+            else:
+                # 클러스터 경로가 없는 경우 비디오 이름 기반으로 디렉토리 생성
+                video_name = result['metadata']['video_name']
+                clusters_dir = f"outputs/clip_analysis/{video_name}"
+                os.makedirs(clusters_dir, exist_ok=True)
             
             # 비디오 이름과 타임스탬프로 고유한 파일명 생성
             video_name = result['metadata']['video_name']
+            search_mode = "full_grid" if generator.full_grid_search else "cluster"
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            output_path = os.path.join(clusters_dir, f'scored_windows_{video_name}_{timestamp}.json')
+            output_path = os.path.join(clusters_dir, f'scored_windows_{video_name}_{search_mode}_{timestamp}.json')
         
         generator.save_scored_windows(result, output_path)
         

@@ -14,6 +14,9 @@ window_generation:
   length_range: {min: 18, max: 40, step: 1}   # 윈도우 길이들 (초)
   step_size: 1                      # 슬라이딩 간격 (초)
   position_ratio: 0.75              # 하이라이트 위치 비율 (3/4 지점)
+  full_grid_search: false           # 전체 그리드 서치 모드 (기본값: false)
+  grid_step: 1.0                    # 그리드 서치 간격 (초)
+
   
 # 3단계: XGBoost 모델
 model:
@@ -27,6 +30,12 @@ selection:
   min_score: 0.5                   # 최소 재미도 점수
   min_duration: 15                 # 최소 클립 길이
   max_duration: 40                 # 최대 클립 길이
+
+# 5단계: 클립 경계 조정 (VAD 기반)
+clip_refiner:
+  max_extend_seconds: 3.0           # 최대 확장 가능 길이 (초)
+  silence_padding: 0.05             # 무음 구간 발견 시 추가 패딩 (초)
+  extend_on_speech_boundary: true   # 음성 경계에 맞춰 확장 (true/false)
 
 # 출력 설정
 output:

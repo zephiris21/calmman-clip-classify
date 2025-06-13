@@ -343,6 +343,16 @@ class PipelineUtils:
         # 특수문자를 언더스코어로 대체
         safe_name = re.sub(r'[^\w\-_.]', '_', filename)
         return safe_name
+        
+    @staticmethod
+    def get_timestamp() -> str:
+        """
+        현재 시간 기반 타임스탬프 문자열 생성
+        
+        Returns:
+            str: 타임스탬프 문자열 (YYYYMMDD_HHMMSS 형식)
+        """
+        return datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # =============================================================================
     # 파일 유틸리티 함수들 (새로 추가)

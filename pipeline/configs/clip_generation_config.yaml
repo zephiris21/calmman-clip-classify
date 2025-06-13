@@ -1,0 +1,23 @@
+# 6단계: 실제 클립 추출 (FFmpeg)
+clip_extraction:
+  # FFmpeg 비디오 설정
+  video_codec: "libx264"           # H.264 코덱 (최고 호환성)
+  video_crf: 23                    # 화질 (18=고화질/큰용량, 23=균형, 28=저화질/작은용량)
+  preset: "fast"                   # 속도 (ultrafast/fast/medium/slow)
+  audio_codec: "aac"               # AAC 오디오 코덱 (표준)
+  
+  # 파일명 형식
+  filename_format: "fun_{rank:03d}_{video_name}_{start:.1f}_{end:.1f}"
+  
+  # 출력 설정
+  output_base: "outputs/funclips"  # 클립 저장 기본 경로
+  create_merged_clips: true        # 비디오+오디오 병합 클립 생성
+  create_separate_tracks: false    # 비디오/오디오 분리 저장 (디버그용)
+  
+  # 처리 옵션
+  batch_size: 3                    # 동시 처리할 클립 수 (CPU/메모리에 따라 조정)
+  overwrite_existing: false        # 기존 파일 덮어쓰기 여부
+  
+  # 품질 옵션
+  avoid_negative_ts: true          # 타임스탬프 오류 방지
+  accurate_seek: true              # 정확한 시간 자르기 (-ss를 입력 전에 배치)
