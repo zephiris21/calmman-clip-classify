@@ -103,7 +103,7 @@ class WindowGenerator:
             
             return all_lengths
     
-    def load_clusters(self, clusters_json_path: str) -> List[Dict]:
+    def load_clusters(self, clusters_json_path: str) -> Dict:
         """클러스터 JSON 파일 로드"""
         try:
             with open(clusters_json_path, 'r', encoding='utf-8') as f:
@@ -115,19 +115,21 @@ class WindowGenerator:
             self.logger.info(f"📊 클러스터 로드 완료: {len(clusters)}개")
             self.logger.info(f"   원본 하이라이트: {metadata['total_highlights']}개")
             self.logger.info(f"   확장된 클러스터: {metadata['single_expanded_count']}개")
+            if 'video_name' in metadata:
+                self.logger.info(f"   비디오: {metadata['video_name']}")
             
-            return clusters
+            return data
             
         except Exception as e:
             self.logger.error(f"❌ 클러스터 로드 실패: {e}")
             raise
     
-    def generate_cluster_windows(self, clusters: List[Dict], video_duration: float) -> List[Dict]:
+    def generate_cluster_windows(self, cluster_data: Dict, video_duration: float) -> List[Dict]:
         """
         클러스터 기반 윈도우 생성
         
         Args:
-            clusters (List[Dict]): 클러스터 리스트
+            cluster_data (Dict): 클러스터 데이터 (전체 데이터)
             video_duration (float): 영상 전체 길이 (초)
             
         Returns:
@@ -138,44 +140,69 @@ class WindowGenerator:
         windows = []
         window_id = 0
         
+        # 클러스터 리스트 추출
+        clusters = cluster_data['clusters']
+        
         for cluster in clusters:
             cluster_id = cluster['cluster_id']
             
-            # 클러스터 내 원본 하이라이트만 사용 (가상 포인트 제외)
-            original_points = [p for p in cluster['points'] if p.get('type', 'original') == 'original']
+            # 클러스터 span 계산 (또는 이미 계산된 span 사용)
+            if 'span' in cluster:
+                cluster_span = cluster['span']
+                span_start = cluster_span['start']
+                span_end = cluster_span['end']
+            else:
+                # span이 없는 경우 직접 계산
+                timestamps = [p['timestamp'] for p in cluster['points']]
+                if not timestamps:
+                    self.logger.warning(f"⚠️ 클러스터 {cluster_id}: 포인트 없음")
+                    continue
+                span_start = min(timestamps)
+                span_end = max(timestamps)
             
-            if not original_points:
-                self.logger.warning(f"⚠️ 클러스터 {cluster_id}: 원본 하이라이트 없음")
-                continue
+            self.logger.info(f"   클러스터 {cluster_id} 범위: {span_start:.1f}초 ~ {span_end:.1f}초")
             
-            # 각 원본 하이라이트 × 각 윈도우 길이 조합
+            # 각 윈도우 길이별 윈도우 생성
             cluster_windows = 0
-            for point in original_points:
-                highlight_time = point['timestamp']
+            for length in self.window_lengths:
+                # 윈도우 시작 범위 계산 (하이라이트가 3/4 지점에 오도록)
+                start_min = span_start - (length * self.position_ratio)
+                start_max = span_end - (length * self.position_ratio)
                 
-                for length in self.window_lengths:
-                    # 3/4 지점 배치: 하이라이트가 윈도우의 75% 위치에 오도록
-                    start_time = highlight_time - (length * self.position_ratio)
-                    end_time = start_time + length
+                # 슬라이딩 윈도우 생성 (1초 간격)
+                start = int(start_min) if start_min >= 0 else 0
+                while start <= start_max and start <= video_duration - length:
+                    end_time = start + length
                     
-                    # 영상 범위 체크 (자연스러운 경계 처리)
-                    if start_time >= 0 and end_time <= video_duration:
+                    # 영상 범위 체크
+                    if end_time <= video_duration:
+                        # 윈도우에 해당하는 하이라이트 시간 (클러스터의 중간점 사용)
+                        highlight_time = (span_start + span_end) / 2
+                        
+                        # 텐션 값 (클러스터 내 최대 텐션 또는 평균 텐션)
+                        tensions = [float(p.get('tension', 0.0)) for p in cluster['points']]
+                        highlight_tension = max(tensions) if tensions else 0.0
+                        
                         windows.append({
                             'id': window_id,
-                            'start_time': float(start_time),
+                            'start_time': float(start),
                             'end_time': float(end_time),
                             'duration': length,
                             'cluster_id': cluster_id,
                             'highlight_time': float(highlight_time),
-                            'highlight_tension': float(point.get('tension', 0.0))
+                            'highlight_tension': highlight_tension
                         })
                         window_id += 1
                         cluster_windows += 1
+                    
+                    # 다음 시작점 (1초 간격)
+                    start += self.step_size
             
-            self.logger.debug(f"   클러스터 {cluster_id}: {len(original_points)}개 하이라이트 → {cluster_windows}개 윈도우")
+            self.logger.debug(f"   클러스터 {cluster_id}: {cluster_windows}개 윈도우")
         
         self.logger.info(f"✅ 윈도우 생성 완료: {len(windows)}개")
-        self.logger.info(f"   평균 윈도우/클러스터: {len(windows)/len(clusters):.1f}개")
+        if clusters:
+            self.logger.info(f"   평균 윈도우/클러스터: {len(windows)/len(clusters):.1f}개")
         
         return windows
     
@@ -448,13 +475,13 @@ class WindowGenerator:
         self.logger.info("🔍 윈도우 생성 및 점수 계산 프로세스 시작")
         
         # 1. 클러스터 로드
-        clusters = self.load_clusters(clusters_json_path)
+        cluster_data = self.load_clusters(clusters_json_path)
         
         # 2. 파이프라인 데이터 로드
         synced_data = self.load_pipeline_data(video_h5_path, audio_h5_path, tension_json_path)
         
         # 3. 윈도우 생성
-        windows = self.generate_cluster_windows(clusters, synced_data['duration'])
+        windows = self.generate_cluster_windows(cluster_data, synced_data['duration'])
         
         if not windows:
             raise ValueError("생성된 윈도우가 없습니다. 클러스터나 영상 길이를 확인하세요.")
@@ -469,9 +496,13 @@ class WindowGenerator:
         for i, window in enumerate(windows):
             window['fun_score'] = fun_scores[i]
         
+        # 비디오 이름 가져오기 (클러스터 메타데이터에서)
+        video_name = cluster_data.get('metadata', {}).get('video_name', 'unknown')
+        
         # 7. 결과 구성
         result = {
             'metadata': {
+                'video_name': video_name,
                 'total_windows': len(windows),
                 'video_duration': synced_data['duration'],
                 'score_statistics': {
@@ -479,6 +510,12 @@ class WindowGenerator:
                     'std': float(np.std(fun_scores)),
                     'min': float(np.min(fun_scores)),
                     'max': float(np.max(fun_scores))
+                },
+                'source_files': {
+                    'clusters': os.path.basename(clusters_json_path),
+                    'video_h5': os.path.basename(video_h5_path),
+                    'audio_h5': os.path.basename(audio_h5_path),
+                    'tension': os.path.basename(tension_json_path)
                 },
                 'generated_at': datetime.now().isoformat()
             },
@@ -493,6 +530,7 @@ class WindowGenerator:
         }
         
         self.logger.info("🔍 윈도우 생성 및 점수 계산 완료!")
+        self.logger.info(f"   비디오: {video_name}")
         self.logger.info(f"   최종 윈도우: {len(windows)}개")
         self.logger.info(f"   평균 재미도: {np.mean(fun_scores):.3f}")
         
@@ -526,6 +564,8 @@ class WindowGenerator:
             metadata = scored_windows['metadata']
             self.logger.info(f"   총 윈도우: {metadata['total_windows']}개")
             self.logger.info(f"   평균 점수: {metadata['score_statistics']['mean']:.3f}")
+            if 'video_name' in metadata:
+                self.logger.info(f"   비디오: {metadata['video_name']}")
             
         except Exception as e:
             self.logger.error(f"❌ 점수 윈도우 저장 실패: {e}")
@@ -572,9 +612,13 @@ def main():
             output_path = args.output
         else:
             # 기본 출력 경로 생성
-            clusters_data = generator.load_clusters(args.clusters_json)
-            video_name = os.path.basename(args.clusters_json).replace('clusters.json', 'scored_windows.json')
-            output_path = f"outputs/clip_analysis/{video_name}"
+            # 클러스터 경로에서 디렉토리 구조 유지하여 저장
+            clusters_dir = os.path.dirname(args.clusters_json)
+            
+            # 비디오 이름과 타임스탬프로 고유한 파일명 생성
+            video_name = result['metadata']['video_name']
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_path = os.path.join(clusters_dir, f'scored_windows_{video_name}_{timestamp}.json')
         
         generator.save_scored_windows(result, output_path)
         

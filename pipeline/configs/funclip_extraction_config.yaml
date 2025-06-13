@@ -11,7 +11,7 @@ clustering:
 
 # 2단계: 윈도우 생성 및 점수 계산  
 window_generation:
-  lengths: [18, 19, 20, ..., 40]    # 윈도우 길이들 (초)
+  length_range: {min: 18, max: 40, step: 1}   # 윈도우 길이들 (초)
   step_size: 1                      # 슬라이딩 간격 (초)
   position_ratio: 0.75              # 하이라이트 위치 비율 (3/4 지점)
   

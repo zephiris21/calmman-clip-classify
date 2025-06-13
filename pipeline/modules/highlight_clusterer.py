@@ -311,11 +311,11 @@ class HighlightClusterer:
             parts = name_part.split('_')
             if len(parts) >= 3:
                 # 마지막 2개 부분이 날짜+시간 형식이면 제거
-                if parts[-1] == 'json':
+                if parts[-1].endswith('.json'):
+                    parts[-1] = parts[-1].replace('.json', '')
+                if len(parts) > 2 and len(parts[-1]) == 6 and parts[-1].isdigit():  # 시간 부분
                     parts = parts[:-1]
-                if len(parts[-1]) == 6 and parts[-1].isdigit():  # 시간 부분
-                    parts = parts[:-1]
-                if len(parts[-1]) == 8 and parts[-1].isdigit():  # 날짜 부분
+                if len(parts) > 2 and len(parts[-1]) == 8 and parts[-1].isdigit():  # 날짜 부분
                     parts = parts[:-1]
                 return '_'.join(parts)
         
@@ -387,7 +387,8 @@ def main():
         else:
             # 기본 출력 경로 생성
             video_name = result['metadata']['video_name']
-            output_path = f"outputs/clip_analysis/{video_name}/clusters.json"
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_path = f"outputs/clip_analysis/{video_name}/clusters_{video_name}_{timestamp}.json"
         
         clusterer.save_clusters(result, output_path)
         
