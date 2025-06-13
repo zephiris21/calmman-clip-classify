@@ -5,6 +5,7 @@ import os
 import sys
 import glob
 import time
+import logging
 import argparse
 from pathlib import Path
 from typing import Optional, Dict, List
@@ -48,11 +49,13 @@ class ClipExtractPipeline:
         # 설정 로드
         self.config = PipelineUtils.load_config(config_path)
         
-        # 출력 디렉토리 생성
-        self.output_dirs = PipelineUtils.setup_output_directories(self.config)
-        
-        # 로깅 설정
-        self.logger = PipelineUtils.setup_logging(self.config, self.output_dirs)
+        # 로깅 설정 (간단히)
+        self.logger = logging.getLogger(__name__)
+        if not self.logger.handlers:
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            self.logger.addHandler(console_handler)
+            self.logger.setLevel(logging.INFO)
         
         # 전처리 체커 초기화
         self.preprocessing_checker = PreprocessingChecker(config_path)

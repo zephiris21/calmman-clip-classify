@@ -4,7 +4,6 @@
 import os
 import yaml
 import h5py
-import glob
 import logging
 import numpy as np
 import sys
@@ -276,12 +275,12 @@ class PipelineUtils:
         return None
     
     @staticmethod
-    def print_step_banner(step_num, step_name: str, description: str):
+    def print_step_banner(step_num: int, step_name: str, description: str):
         """
         단계별 배너 출력
         
         Args:
-            step_num: 단계 번호
+            step_num (int): 단계 번호
             step_name (str): 단계 이름
             description (str): 단계 설명
         """
@@ -291,12 +290,12 @@ class PipelineUtils:
         print(f"{'='*60}")
     
     @staticmethod
-    def print_completion_banner(step_num, step_name: str, result_info: str = ""):
+    def print_completion_banner(step_num: int, step_name: str, result_info: str = ""):
         """
         단계 완료 배너 출력
         
         Args:
-            step_num: 단계 번호
+            step_num (int): 단계 번호
             step_name (str): 단계 이름
             result_info (str): 결과 정보
         """
@@ -343,128 +342,6 @@ class PipelineUtils:
         # 특수문자를 언더스코어로 대체
         safe_name = re.sub(r'[^\w\-_.]', '_', filename)
         return safe_name
-
-    # =============================================================================
-    # 파일 유틸리티 함수들 (새로 추가)
-    # =============================================================================
-    
-    @staticmethod
-    def find_video_file(input_path: str, base_dir: str = "dataset/clips") -> Optional[str]:
-        """
-        비디오 파일 찾기 (패턴 매칭 지원)
-        
-        Args:
-            input_path (str): 입력 경로 또는 파일명
-            base_dir (str): 기본 검색 디렉토리
-            
-        Returns:
-            str: 찾은 비디오 파일 경로 (없으면 None)
-        """
-        # 1. 절대 경로인지 확인
-        if os.path.isabs(input_path) and os.path.exists(input_path):
-            return input_path
-        
-        # 2. 상대 경로인지 확인
-        if os.path.exists(input_path):
-            return input_path
-        
-        # 3. 현재 디렉토리에서 확인
-        if os.path.exists(os.path.basename(input_path)):
-            return os.path.basename(input_path)
-        
-        # 4. 기본 디렉토리에서 패턴 매칭
-        if os.path.exists(base_dir):
-        # 4. 기본 디렉토리에서 패턴 매칭
-        if os.path.exists(base_dir):
-            # 정확한 파일명 매칭
-            exact_path = os.path.join(base_dir, input_path)
-            if os.path.exists(exact_path):
-                return exact_path
-            
-            # 패턴 매칭 (확장자 없이 입력된 경우)
-            name_without_ext = os.path.splitext(input_path)[0]
-            patterns = [
-                f"{input_path}",
-                f"{name_without_ext}.*",
-                f"*{input_path}*",
-                f"*{name_without_ext}*"
-            ]
-            
-            for pattern in patterns:
-                search_pattern = os.path.join(base_dir, pattern)
-                matches = glob.glob(search_pattern)
-                
-                # 비디오 파일만 필터링
-                video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv']
-                video_matches = [m for m in matches 
-                               if any(m.lower().endswith(ext) for ext in video_extensions)]
-                
-                if video_matches:
-                    return video_matches[0]  # 첫 번째 매치 반환
-        
-        return None
-    
-    @staticmethod
-    def get_video_input() -> Optional[str]:
-        """
-        대화형 비디오 파일 입력
-        
-        Returns:
-            str: 선택된 비디오 파일 경로
-        """
-        print(f"\n📁 비디오 파일을 지정하세요:")
-        print(f"   1. 파일명만 입력 (dataset/clips/에서 검색)")
-        print(f"   2. 상대/절대 경로 입력")
-        print(f"   예시: clip.mp4, funny/clip.mp4, D:/videos/clip.mp4")
-        
-        while True:
-            user_input = input("입력: ").strip()
-            
-            if not user_input:
-                print("❌ 파일명을 입력해주세요.")
-                continue
-            
-            # 비디오 파일 찾기
-            video_path = PipelineUtils.find_video_file(user_input)
-            
-            if video_path:
-                # 파일 정보 표시
-                file_size = os.path.getsize(video_path) / (1024 * 1024)  # MB
-                print(f"✅ 비디오 파일 확인: {video_path}")
-                print(f"   크기: {file_size:.1f}MB")
-                return video_path
-            else:
-                print(f"❌ 파일을 찾을 수 없습니다: {user_input}")
-                print(f"   dataset/clips/ 디렉토리를 확인하거나 전체 경로를 입력해주세요.")
-                
-                retry = input("다시 시도하시겠습니까? (y/n): ").strip().lower()
-                if retry != 'y':
-                    return None
-    
-    @staticmethod
-    def get_user_choice() -> str:
-        """
-        사용자 입력 받기 (단일 파일 vs 배치 처리)
-        
-        Returns:
-            str: 'single', 'batch', 또는 'quit'
-        """
-        print(f"\n📁 처리 방식을 선택하세요:")
-        print(f"   1. 단일 파일 처리 - 파일명 입력")
-        print(f"   2. 배치 처리 (dataset/clips) - Enter")
-        print(f"   3. 종료 - q")
-        
-        while True:
-            user_input = input("\n선택 (1/2/q): ").strip().lower()
-            
-            if user_input in ['', '2']:
-                return 'batch'
-            elif user_input == '1':
-                return 'single'
-            elif user_input == 'q':
-                return 'quit'
-            else:
-                print("❌ 잘못된 입력입니다. 1, 2, 또는 q를 입력하세요.")
 
 
 def main():
